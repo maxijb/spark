@@ -1,6 +1,5 @@
 ---
-layout: global
-title: "Eager vs Lazy: Spark Connect vs Spark Classic"
+title: 'Eager vs Lazy: Spark Connect vs Spark Classic'
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -18,64 +17,66 @@ license: |
   limitations under the License.
 ---
 
+# Eager vs Lazy: Spark Connect vs Spark Classic
+
 The comparison highlights key differences between Spark Connect and Spark Classic in terms of execution and analysis behavior. While both utilize lazy execution for transformations, Spark Connect also defers analysis, introducing unique considerations like temporary view handling and UDF evaluation. The guide outlines common gotchas and provides strategies for mitigation.
 
 **When does this matter?** These differences are particularly important when migrating existing code from Spark Classic to Spark Connect, or when writing code that needs to work with both modes. Understanding these distinctions helps avoid unexpected behavior and performance issues.
 
 For an overview of Spark Connect, see [Spark Connect Overview](spark-connect-overview.html).
 
-# Query Execution: Both Lazy
+## Query Execution: Both Lazy
 
-## Spark Classic
+### Spark Classic
 
 In traditional Spark, DataFrame transformations (e.g., `filter`, `limit`) are lazy. This means they are not executed immediately but are encoded in a logical plan. The actual computation is triggered only when an action (e.g., `show()`, `collect()`) is triggered.
 
-## Spark Connect
+### Spark Connect
 
 Spark Connect follows a similar lazy evaluation model. Transformations are constructed on the client side and sent as unresolved plans to the server. The server then performs the necessary analysis and execution when an action is called.
 
-## Comparison
+### Comparison
 
 Both Spark Classic and Spark Connect follow the same lazy execution model for query execution.
 
-| Aspect                                                                                | Spark Classic & Spark Connect |
-|:--------------------------------------------------------------------------------------|:------------------------------|
-| Transformations: `df.filter(...)`, `df.select(...)`, `df.limit(...)`, etc             | Lazy execution                |
-| SQL queries: <br/> `spark.sql("select …")`                                            | Lazy execution                |
-| Actions: `df.collect()`, `df.show()`, etc                                             | Eager execution               |
-| SQL commands: <br/> `spark.sql("insert …")`, <br/> `spark.sql("create …")`, <br/> etc | Eager execution               |
+| Aspect                                                                                                    | Spark Classic & Spark Connect |
+| --------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Transformations: `df.filter(...)`, `df.select(...)`, `df.limit(...)`, etc                                 | Lazy execution                |
+| <p>SQL queries:<br><code>spark.sql("select …")</code></p>                                                 | Lazy execution                |
+| Actions: `df.collect()`, `df.show()`, etc                                                                 | Eager execution               |
+| <p>SQL commands:<br><code>spark.sql("insert …")</code>,<br><code>spark.sql("create …")</code>,<br>etc</p> | Eager execution               |
 
-# Schema Analysis: Eager vs. Lazy
+## Schema Analysis: Eager vs. Lazy
 
-## Spark Classic
+### Spark Classic
 
 Traditionally, Spark Classic performs analysis eagerly during logical plan construction. This analysis phase converts the unresolved plan into a fully resolved logical plan and verifies that the operation can be executed by Spark. One of the key benefits of performing this work eagerly is that users receive immediate feedback when a mistake is made.
 
 For example, executing `spark.sql("select 1 as a, 2 as b").filter("c > 1")` will throw an error eagerly, indicating the column `c` cannot be found.
 
-## Spark Connect
+### Spark Connect
 
 Spark Connect differs from Classic because the client constructs unresolved plans during transformation and defers their analysis. Any operation that requires a resolved plan—such as accessing a schema, explaining the plan, persisting a DataFrame, or executing an action—causes the client to send the unresolved plans to the server over RPC. The server then performs full analysis to get its resolved logical plan and do the operation.
 
 For example, `spark.sql("select 1 as a, 2 as b").filter("c > 1")` will not throw any error because the unresolved plan is client-side only, but on `df.columns` or `df.show()` an error will be thrown because the unresolved plan is sent to the server for analysis.
 
-## Comparison
+### Comparison
 
 Unlike query execution, Spark Classic and Spark Connect differ in when schema analysis occurs.
 
-| Aspect                                                                          | Spark Classic | Spark Connect                                                                          |
-|:--------------------------------------------------------------------------------|:--------------|:---------------------------------------------------------------------------------------|
-| Transformations: `df.filter(...)`, `df.select(...)`, `df.limit(...)`, etc       | Eager         | **Lazy**                                                                               |
-| Schema access: `df.columns`, `df.schema`, `df.isStreaming`, etc                 | Eager         | **Eager** <br/> **Triggers an analysis RPC request, unlike Spark Classic**             |
-| Actions: `df.collect()`, `df.show()`, etc                                       | Eager         | Eager                                                                                  |
-| Dependent session state of DataFrames: UDFs, temporary views, configs, etc      | Eager         | **Lazy** <br/> **Evaluated during the plan execution of the DataFrame**                |
-| Dependent session state of temporary views: UDFs, temporary views, configs, etc | Eager         | **Eager** <br/> **The analysis is triggered eagerly when creating the temporary view** |
+| Aspect                                                                          | Spark Classic | Spark Connect                                                                                                        |
+| ------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Transformations: `df.filter(...)`, `df.select(...)`, `df.limit(...)`, etc       | Eager         | **Lazy**                                                                                                             |
+| Schema access: `df.columns`, `df.schema`, `df.isStreaming`, etc                 | Eager         | <p><strong>Eager</strong><br><strong>Triggers an analysis RPC request, unlike Spark Classic</strong></p>             |
+| Actions: `df.collect()`, `df.show()`, etc                                       | Eager         | Eager                                                                                                                |
+| Dependent session state of DataFrames: UDFs, temporary views, configs, etc      | Eager         | <p><strong>Lazy</strong><br><strong>Evaluated during the plan execution of the DataFrame</strong></p>                |
+| Dependent session state of temporary views: UDFs, temporary views, configs, etc | Eager         | <p><strong>Eager</strong><br><strong>The analysis is triggered eagerly when creating the temporary view</strong></p> |
 
-# Common Gotchas (with Mitigations)
+## Common Gotchas (with Mitigations)
 
 If you are not careful about the difference between lazy vs. eager analysis, there are four key gotchas to be aware of: 1) overwriting temporary view names, 2) capturing external variables in UDFs, 3) delayed error detection, and 4) excessive schema access on new DataFrames.
 
-## 1. Reusing temporary view names
+### 1. Reusing temporary view names
 
 ```python
 def create_temp_view_and_create_dataframe(x):
@@ -116,7 +117,7 @@ This behavior differs from Spark Classic, where due to eager analysis, the logic
 
 In Spark Connect, users should be more cautious when reusing temporary view names, as replacing an existing temp view will affect all previously created DataFrames that reference it by name.
 
-### Mitigation
+#### Mitigation
 
 Create unique temporary view names, for example by including a UUID in the view name. This avoids affecting any existing DataFrames that reference a previously registered temp view.
 
@@ -164,7 +165,7 @@ assert(df10.collect().length == 10) // Works as expected
 assert(df100.collect().length == 100)
 ```
 
-## 2. UDFs with mutable external variables
+### 2. UDFs with mutable external variables
 
 It is generally considered bad practice for UDFs to depend on mutable external variables, as this introduces implicit dependencies, can lead to non-deterministic behavior, and reduces composability. However, if you do have such a pattern, be aware of the following gotcha:
 
@@ -202,9 +203,9 @@ for j in ['column_1', 'column_2']:
 df.show() # It shows 2 for both 'column_1' and 'column_2' 
 ```
 
-This is the same issue as above. It happens because Python closures capture variables by reference, not by value, and UDF serialization and registration is deferred when there is an action on the DataFrame. So both UDFs end up using the last value of j — in this case 'column_2'.
+This is the same issue as above. It happens because Python closures capture variables by reference, not by value, and UDF serialization and registration is deferred when there is an action on the DataFrame. So both UDFs end up using the last value of j — in this case 'column\_2'.
 
-### Mitigation
+#### Mitigation
 
 If you need to modify the value of external variables that a UDF depends on, use a function factory (closure with early binding) to correctly capture variable values. Specifically, wrap the UDF creation in a helper function to capture the value of a dependent variable at each loop iteration.
 
@@ -238,7 +239,7 @@ val df = spark.range(1).select(fooUDF())
 df.show() // Prints 123 as expected
 ```
 
-## 3. Delayed error detection
+### 3. Delayed error detection
 
 Error handling during transformations:
 
@@ -257,7 +258,7 @@ except Exception as e:
 
 The above error handling is useful in Spark Classic because it performs eager analysis, which allows exceptions to be thrown promptly. However, in Spark Connect, this code does not pose any issue, as it only constructs a local unresolved plan without triggering any analysis.
 
-### Mitigation
+#### Mitigation
 
 If your code relies on the analysis exception and wants to catch it, you can trigger eager analysis with `df.columns`, `df.schema`, `df.collect()`, etc.
 
@@ -287,9 +288,9 @@ try {
 }
 ```
 
-## 4. Excessive schema access on new DataFrames
+### 4. Excessive schema access on new DataFrames
 
-### 4.1 Creating new DataFrames step by step and accessing their schema on each iteration
+#### 4.1 Creating new DataFrames step by step and accessing their schema on each iteration
 
 The following is an anti-pattern:
 
@@ -305,16 +306,11 @@ df.show()
 
 While building the DataFrame step by step, each time a new DataFrame is generated with an empty schema, which is lazily computed and cached on access. However, if a user's code accesses the schema of a large number of **new** DataFrames using methods such as `df.columns`, it will result in a large number of analysis requests to the server.
 
-<p style="text-align: center;">
-  <img src="img/spark-connect-gotchas-antipattern.png"
-       title="Triggering too many analysis of new DataFrames"
-       alt="Triggering too many analysis of new DataFrames"
-       width="50%" />
-</p>
+![Triggering too many analysis of new DataFrames](../.gitbook/assets/spark-connect-gotchas-antipattern.png)
 
 Performance can be improved if users avoid large numbers of Analyze requests by avoiding excessive usage of calls triggering eager analysis (e.g. `df.columns`, `df.schema`, etc)
 
-### Mitigation
+#### Mitigation
 
 In the above specific example, the recommended mitigation is to create all the column expressions in a loop, and create a single project with all columns (`df.select(*col_exprs)`).
 
@@ -348,7 +344,7 @@ for (i <- 0 until 200) {
 df.show()
 ```
 
-### 4.2 Creating a large number of intermediate DataFrames and accessing their schema
+#### 4.2 Creating a large number of intermediate DataFrames and accessing their schema
 
 Another similar case is creating a large number of unnecessary intermediate DataFrames and analyzing them. In the following case, the goal is to extract the field names from each column of a struct type.
 
@@ -385,7 +381,7 @@ print(struct_column_fields)
 
 However, this code snippet can lead to poor performance when there are many columns, as it creates and analyzes a large number of new DataFrames—each call to `df.select(column_schema.name + ".*")` generates a new DataFrame, and `columns` triggers analysis on it.
 
-### Mitigation
+#### Mitigation
 
 Obtain `StructType` field information directly from the DataFrame's schema instead of creating intermediate DataFrames.
 
@@ -418,10 +414,10 @@ println(structColumnFields)
 
 This approach is significantly faster when dealing with a large number of columns because it avoids creating and analyzing numerous DataFrames.
 
-# Summary
+## Summary
 
 | Aspect                | Spark Classic | Spark Connect                                       |
-|:----------------------|:--------------|:----------------------------------------------------|
+| --------------------- | ------------- | --------------------------------------------------- |
 | **Query execution**   | Lazy          | Lazy                                                |
 | **Command execution** | Eager         | Eager                                               |
 | **Schema analysis**   | Eager         | Lazy                                                |
