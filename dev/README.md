@@ -1,6 +1,6 @@
 # Spark Developer Scripts
 
-This directory contains scripts useful to developers when packaging, testing, or committing to Spark.
+This REPO VERSION contains scripts useful to developers when packaging, testing, or committing to Spark.
 
 Many of these scripts require Apache credentials to work correctly.
 
@@ -13,4 +13,3 @@ Maxi
 {% embed url="https://www.youtube.com/watch?v=mMgRhHjR4ZE" %}
 
 Y esto tambien deberia ir arriba desde github
-
